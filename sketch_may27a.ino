@@ -280,7 +280,7 @@ static ScreenLayout getScreenLayout()
   layout.tempCardX = layout.margin;
   layout.humCardX = layout.margin + layout.cardW + layout.gap;
   layout.cardRadius = 14;
-  layout.sensorTopY = layout.cardY - 40;
+  layout.sensorTopY = layout.cardY - layout.gap;
   layout.sensorH = layout.screenH - layout.sensorTopY;
   return layout;
 }
