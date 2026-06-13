@@ -31,6 +31,7 @@ bool hasSensorReading = false;
 
 float temperatureC = 0.0f;
 float humidityPct = 0.0f;
+String lastUpdatedText = "NOT UPDATED";
 int lastRtcSlot = -1;
 uint32_t lastSensorUpdateMs = 0;
 m5::I2C_Class* sensorBus = nullptr;
@@ -167,6 +168,36 @@ static bool drawCurrentImage(lgfx::LGFXBase& gfx, int x, int y, int width, int h
   return gfx.drawPng(default_image_png, default_image_png_len, x, y, width, height, 0, 0, 0.0f, 0.0f, middle_center);
 }
 
+static void updateLastUpdatedText()
+{
+  if (rtcReady) {
+    const auto now = M5.Rtc.getDateTime();
+    char text[32];
+    snprintf(text, sizeof(text), "%02u/%02u %02u:%02u", static_cast<unsigned>(now.date.month),
+             static_cast<unsigned>(now.date.date), static_cast<unsigned>(now.time.hours),
+             static_cast<unsigned>(now.time.minutes));
+    lastUpdatedText = text;
+  } else {
+    const uint32_t totalSeconds = millis() / 1000UL;
+    const uint32_t hours = totalSeconds / 3600UL;
+    const uint32_t minutes = (totalSeconds / 60UL) % 60UL;
+    const uint32_t seconds = totalSeconds % 60UL;
+    char text[32];
+    snprintf(text, sizeof(text), "UPTIME %02lu:%02lu:%02lu", static_cast<unsigned long>(hours),
+             static_cast<unsigned long>(minutes), static_cast<unsigned long>(seconds));
+    lastUpdatedText = text;
+  }
+}
+
+static int readBatteryLevelPercent()
+{
+  const int level = static_cast<int>(M5.Power.getBatteryLevel());
+  if (level < 0) {
+    return -1;
+  }
+  return min(max(level, 0), 100);
+}
+
 static bool updateSensorReading()
 {
   if (!sensorReady || sensorBus == nullptr) {
@@ -209,6 +240,7 @@ static bool updateSensorReading()
   humidityPct = -6.0f + (125.0f * rh_ticks / 65535.0f);
   humidityPct = min(max(humidityPct, 0.0f), 100.0f);
   hasSensorReading = true;
+  updateLastUpdatedText();
   Serial.printf("Sensor updated: %.1f C / %.1f %%\r\n", temperatureC, humidityPct);
   return true;
 }
@@ -304,6 +336,7 @@ static void renderSensorSection()
 {
   const int cardLocalY = screenLayout.cardY - screenLayout.sensorTopY;
   const int swipeLocalY = (screenLayout.cardY - 6) - screenLayout.sensorTopY;
+  const int metaLocalY = cardLocalY + screenLayout.cardH - 22;
 
   sensorCanvas.fillSprite(WHITE);
   drawCenteredText(sensorCanvas, "Swipe left/right to change the image", screenLayout.screenW / 2, swipeLocalY, &fonts::Font2, BLACK,
@@ -343,6 +376,21 @@ static void renderSensorSection()
     drawCenteredText(sensorCanvas, "not found", screenLayout.humCardX + (screenLayout.cardW / 2), cardLocalY + 128,
                      &fonts::FreeSansBold18pt7b, BLACK, middle_center);
   }
+
+  const int batteryLevel = readBatteryLevelPercent();
+  char batteryText[24];
+  char updatedText[48];
+  if (batteryLevel >= 0) {
+    snprintf(batteryText, sizeof(batteryText), "BAT %d%%", batteryLevel);
+  } else {
+    snprintf(batteryText, sizeof(batteryText), "BAT --%%");
+  }
+  snprintf(updatedText, sizeof(updatedText), "UPDATED %s", lastUpdatedText.c_str());
+
+  drawCenteredText(sensorCanvas, batteryText, screenLayout.tempCardX + (screenLayout.cardW / 2), metaLocalY, &fonts::Font2, BLACK,
+                   middle_center);
+  drawCenteredText(sensorCanvas, updatedText, screenLayout.humCardX + (screenLayout.cardW / 2), metaLocalY, &fonts::Font2, BLACK,
+                   middle_center);
 
   sensorCanvas.pushSprite(0, screenLayout.sensorTopY);
 }
